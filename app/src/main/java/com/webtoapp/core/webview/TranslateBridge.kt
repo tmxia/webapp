@@ -70,29 +70,17 @@ class TranslateBridge(
                     pending.add(texts.getString(i))
                 }
                 val results = translateBatchWithFallback(pending, targetLang)
-
-                
-                
-                
-                
-                val resultsJson = JSONArray(results).toString()
-                val quotedCallbackId = com.webtoapp.util.JsStrings.quote(callbackId)
-
+                // callbackId comes from page JS. Quote it, or a crafted id
+                // ('x');payload();//) executes when the async call completes.
+                val call = translateCallbackSuccess(callbackId, results)
                 withContext(Dispatchers.Main) {
-                    webView.evaluateJavascript(
-                        "window._translateCallback($quotedCallbackId, $resultsJson);",
-                        null
-                    )
+                    webView.evaluateJavascript(call, null)
                 }
             } catch (e: Exception) {
                 AppLogger.e(TAG, "翻译执行失败", e)
-                val quotedCallbackId = com.webtoapp.util.JsStrings.quote(callbackId)
-                val quotedError = com.webtoapp.util.JsStrings.quote(e.message ?: "translation failed")
+                val call = translateCallbackError(callbackId, e.message ?: "translation failed")
                 withContext(Dispatchers.Main) {
-                    webView.evaluateJavascript(
-                        "window._translateCallback($quotedCallbackId, null, $quotedError);",
-                        null
-                    )
+                    webView.evaluateJavascript(call, null)
                 }
             }
         }
@@ -200,8 +188,8 @@ class TranslateBridge(
 
     private fun translateViaGoogle(payload: String, targetLang: String): String {
         val encoded = URLEncoder.encode(payload, "UTF-8")
-        
-        
+        // targetLang comes from the page: encode it so it cannot inject
+        // query/path structure into the fixed API endpoint.
         val lang = URLEncoder.encode(targetLang, "UTF-8")
         val url = URL("$GOOGLE_API?client=gtx&sl=auto&tl=$lang&dt=t&q=$encoded")
         val conn = TranslateProxyRoute.open(url)
